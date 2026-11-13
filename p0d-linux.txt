@@ -1,0 +1,6 @@
+# Linux hosts - pod 10.170.5.0/24
+10.170.5.30   # WEB01   AlmaLinux 9      (firewalld)
+10.170.5.31   # APP01   Rocky Linux 9    (firewalld)
+10.170.5.32   # MAIL01  openSUSE Leap 15.6 (firewalld)
+10.170.5.40   # SIEM01  Ubuntu           (ufw) - Wazuh/Graylog, harden with care
+# 10.170.5.50 # SOC01   Ubuntu 24.04 Desktop - your control box; use "-t local" for it

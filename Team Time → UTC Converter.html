@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Time → UTC Converter</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171d24; --line: #2a333d; --text: #e6e9ec; --muted: #8b97a3;
+    --accent: #4fb3a9; --accent-ink: #0b1a18; --utc: #e8b04b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f5f6; --panel: #ffffff; --line: #dde1e5; --text: #1b2126; --muted: #5d6973; --accent: #1f7f76; --accent-ink: #fff; --utc: #a66a00; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 10px; font-weight: 600; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  .clocks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .clock { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .clock .z { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .clock .t { font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .clock .d { font-size: 12px; color: var(--muted); }
+  .clock.utc { border-color: var(--utc); }
+  .clock.utc .t { color: var(--utc); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 8px 10px; min-height: 38px; }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; padding: 8px 14px; min-height: 38px;
+           border: 1px solid var(--line); background: transparent; color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:hover { filter: brightness(1.1); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  td { padding: 9px 6px; border-top: 1px solid var(--line); }
+  td.zone { color: var(--muted); width: 26%; }
+  td.copy { text-align: right; width: 1%; white-space: nowrap; }
+  tr.utc td { color: var(--utc); font-weight: 600; }
+  .stamp { margin-top: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; }
+  .stamp .k { color: var(--muted); font-size: 12px; }
+  .stamp .v { font-size: 17px; }
+  .note { margin-top: 12px; font-size: 13px; color: var(--utc); min-height: 1em; }
+
+  textarea { width: 100%; min-height: 120px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--text);
+             background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--accent-ink);
+           padding: 8px 14px; border-radius: 8px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.on { opacity: 1; }
+  @media (max-width: 640px) { .clocks { grid-template-columns: repeat(2, 1fr); } .clock .t { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Team Time → UTC</h1>
+  <p class="sub">Use UTC (“Z”) in all reports and incident timelines. Eastern, Central and Pacific are converted with daylight saving handled automatically.</p>
+
+  <h2>Right now</h2>
+  <div class="clocks" id="clocks"></div>
+
+  <h2>Convert a time</h2>
+  <div class="card">
+    <form class="row" id="form">
+      <label>Date <input type="date" id="date" required></label>
+      <label>Time (24h) <input type="time" id="time" step="60" required></label>
+      <label>Time zone
+        <select id="zone">
+          <option value="America/New_York">Eastern (ET)</option>
+          <option value="America/Chicago">Central (CT)</option>
+          <option value="America/Los_Angeles">Pacific (PT)</option>
+          <option value="UTC">UTC / Zulu</option>
+          <option value="local">This device’s zone</option>
+        </select>
+      </label>
+      <button type="button" id="now">Now</button>
+      <button type="submit" class="primary">Convert</button>
+    </form>
+
+    <table id="results" aria-live="polite"></table>
+    <div class="stamp">
+      <span class="k">Report stamp</span><span class="v mono" id="stamp">—</span><button type="button" data-copy="stamp">Copy</button>
+      <span class="k">ISO 8601</span><span class="v mono" id="iso">—</span><button type="button" data-copy="iso">Copy</button>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+
+  <h2>Batch: convert a list of local times</h2>
+  <div class="card">
+    <label>Paste lines that start with a time, e.g. <span class="mono">14:05 ET - RDP from 10.0.3.44</span></label>
+    <textarea id="batchIn" placeholder="2026-11-13 14:05 ET  Red team RDP to DC01&#10;1:12pm CT  Mimikatz alert on WEB02&#10;11:20 PT  Account evil disabled"></textarea>
+    <p class="hint">Each line needs a time plus ET / CT / PT / UTC (or Z). Date is optional: it defaults to the date above. Everything after the time is kept.</p>
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="primary" id="batchGo">Convert lines</button>
+      <button type="button" data-copy="batchOut">Copy result</button>
+    </div>
+    <textarea id="batchOut" readonly style="margin-top:10px" placeholder="UTC timeline appears here, sorted by time"></textarea>
+  </div>
+</main>
+<div class="toast" id="toast">Copied</div>
+
+<script>
+const TEAM = [
+  { label: "UTC", tz: "UTC" },
+  { label: "Eastern", tz: "America/New_York" },
+  { label: "Central", tz: "America/Chicago" },
+  { label: "Pacific", tz: "America/Los_Angeles" },
+];
+const ALIAS = { ET:"America/New_York", EST:"America/New_York", EDT:"America/New_York",
+  CT:"America/Chicago", CST:"America/Chicago", CDT:"America/Chicago",
+  PT:"America/Los_Angeles", PST:"America/Los_Angeles", PDT:"America/Los_Angeles",
+  MT:"America/Denver", MST:"America/Denver", MDT:"America/Denver",
+  UTC:"UTC", Z:"UTC", GMT:"UTC", ZULU:"UTC" };
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+
+// --- zone math with Intl ---
+function parts(ms, tz) {
+  const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23",
+    year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit",
+    weekday:"short", timeZoneName:"short" });
+  const o = {}; for (const p of f.formatToParts(new Date(ms))) o[p.type] = p.value;
+  return o;
+}
+function offsetMs(ms, tz) {
+  const p = parts(ms, tz);
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return asUTC - Math.floor(ms / 1000) * 1000;
+}
+// wall-clock time in tz -> epoch ms; flags DST gaps and overlaps
+function wallToUtc(y, mo, d, h, mi, tz) {
+  const wall = Date.UTC(y, mo - 1, d, h, mi);
+  if (tz === "UTC") return { ms: wall, note: "" };
+  let ms = wall - offsetMs(wall, tz);
+  const o2 = offsetMs(ms, tz);
+  ms = wall - o2;
+  const back = parts(ms, tz);
+  let note = "";
+  if (+back.hour % 24 !== h || +back.minute !== mi) {
+    ms = wall - offsetMs(ms - 6 * 3600e3, tz);        // use the pre-jump offset, i.e. shift forward
+    const f = parts(ms, tz);
+    note = `${pad(h)}:${pad(mi)} doesn't exist that day in this zone (clocks jumped forward) — shown as ${f.hour}:${f.minute}.`;
+  } else {
+    const alt1 = wall - offsetMs(ms - 3600e3, tz), alt2 = wall - offsetMs(ms + 3600e3, tz);
+    for (const alt of [alt1, alt2]) {
+      if (alt !== ms) { const p = parts(alt, tz); if (+p.hour % 24 === h && +p.minute === mi) {
+        ms = Math.min(ms, alt);
+        note = `${pad(h)}:${pad(mi)} happens twice that day (clocks fell back) — using the first occurrence.`; } }
+    }
+  }
+  return { ms, note };
+}
+function utcStamp(ms) { const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}Z`; }
+function isoStamp(ms) { return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"); }
+function offLabel(ms, tz) { const h = offsetMs(ms, tz) / 3600e3; return "UTC" + (h >= 0 ? "+" : "") + h; }
+
+// --- live clocks ---
+function renderClocks() {
+  const now = Date.now();
+  $("clocks").innerHTML = TEAM.map(z => {
+    const p = parts(now, z.tz);
+    return `<div class="clock ${z.tz === "UTC" ? "utc" : ""}">
+      <div class="z"><span>${z.label}</span><span>${z.tz === "UTC" ? "Z" : p.timeZoneName}</span></div>
+      <div class="t mono">${p.hour}:${p.minute}:${p.second}</div>
+      <div class="d">${p.weekday} ${p.year}-${p.month}-${p.day} · ${offLabel(now, z.tz)}</div></div>`;
+  }).join("");
+}
+renderClocks(); setInterval(renderClocks, 1000);
+
+// --- single conversion ---
+function zoneValue() { const v = $("zone").value; return v === "local" ? Intl.DateTimeFormat().resolvedOptions().timeZone : v; }
+function setNow() {
+  const tz = zoneValue(), p = parts(Date.now(), tz);
+  $("date").value = `${p.year}-${p.month}-${p.day}`; $("time").value = `${p.hour}:${p.minute}`;
+}
+function convert() {
+  if (!$("date").value || !$("time").value) return;
+  const [y, mo, d] = $("date").value.split("-").map(Number);
+  const [h, mi] = $("time").value.split(":").map(Number);
+  const { ms, note } = wallToUtc(y, mo, d, h, mi, zoneValue());
+  $("results").innerHTML = TEAM.map(z => {
+    const p = parts(ms, z.tz);
+    const twelve = new Date(ms).toLocaleTimeString("en-US", { timeZone: z.tz, hour: "numeric", minute: "2-digit" });
+    const txt = `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} ${z.tz === "UTC" ? "Z" : p.timeZoneName}`;
+    return `<tr class="${z.tz === "UTC" ? "utc" : ""}"><td class="zone">${z.label}</td>
+      <td class="mono">${txt}</td><td>${twelve} · ${p.weekday} · ${offLabel(ms, z.tz)}</td>
+      <td class="copy"><button type="button" data-text="${txt}">Copy</button></td></tr>`;
+  }).join("");
+  $("stamp").textContent = utcStamp(ms); $("iso").textContent = isoStamp(ms); $("note").textContent = note;
+  try { localStorage.setItem("bt-utc-zone", $("zone").value); } catch (e) {}
+}
+$("form").addEventListener("submit", e => { e.preventDefault(); convert(); });
+["date", "time", "zone"].forEach(id => $(id).addEventListener("change", convert));
+$("now").addEventListener("click", () => { setNow(); convert(); });
+
+// --- batch conversion ---
+const LINE_RE = /^\s*(?:(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)[ T]+)?(\d{1,2}):?(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?\s*(Z\b|[A-Za-z]{1,4}\b)?\s*[-–—:|,]?\s*(.*)$/i;
+function convertBatch() {
+  const [dy, dmo, dd] = ($("date").value || "").split("-").map(Number);
+  const out = [];
+  for (const raw of $("batchIn").value.split(/\r?\n/)) {
+    if (!raw.trim()) continue;
+    const m = raw.match(LINE_RE);
+    const zoneKey = m && m[5] ? m[5].toUpperCase() : null;
+    if (!m || !zoneKey || !ALIAS[zoneKey]) { out.push({ ms: Infinity, line: "?? (needs time + ET/CT/PT/UTC)  " + raw.trim() }); continue; }
+    let y = dy, mo = dmo, d = dd;
+    if (m[1]) {
+      if (m[1].includes("-")) [y, mo, d] = m[1].split("-").map(Number);
+      else { const a = m[1].split("/").map(Number); mo = a[0]; d = a[1]; y = a[2] ? (a[2] < 100 ? a[2] + 2000 : a[2]) : dy; }
+    }
+    if (!y) { const p = parts(Date.now(), ALIAS[zoneKey]); y = +p.year; mo = +p.month; d = +p.day; }
+    let h = +m[2]; const mi = +m[3]; const ap = (m[4] || "").toLowerCase().replace(/\./g, "");
+    if (ap) h = (h % 12) + (ap === "pm" ? 12 : 0);
+    const { ms } = wallToUtc(y, mo, d, h, mi, ALIAS[zoneKey]);
+    out.push({ ms, line: `${utcStamp(ms)}  ${m[6] || ""}`.trimEnd() });
+  }
+  out.sort((a, b) => a.ms - b.ms);
+  $("batchOut").value = out.map(o => o.line).join("\n");
+}
+$("batchGo").addEventListener("click", convertBatch);
+
+// --- copy ---
+function toast() { const t = $("toast"); t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1100); }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button[data-copy], button[data-text]"); if (!b) return;
+  const text = b.dataset.text ?? ($(b.dataset.copy).value ?? $(b.dataset.copy).textContent);
+  try { await navigator.clipboard.writeText(text); toast(); }
+  catch (err) { const el = $(b.dataset.copy); if (el && el.select) { el.select(); } }
+});
+
+// --- init ---
+try { const z = localStorage.getItem("bt-utc-zone"); if (z) $("zone").value = z; } catch (e) {}
+setNow(); convert();
+</script>
+</body>
+</html>

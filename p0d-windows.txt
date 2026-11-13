@@ -1,0 +1,4 @@
+# Windows hosts - pod 10.170.5.0/24
+10.170.5.10   # DC01  Windows Server (domain controller)
+10.170.5.11   # FS01  Windows Server (file server)
+10.170.5.20   # WS01  Windows 10
